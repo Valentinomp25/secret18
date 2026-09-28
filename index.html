@@ -1,0 +1,43 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Secret18</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#09070b;color:#fff;font-family:system-ui,Arial}.wrap{max-width:900px;margin:auto;padding:20px}.brand{font-size:30px;font-weight:900}.brand b{color:#ff3f8e}.bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:25px}.card{background:#151019;border:1px solid #2c2430;border-radius:18px;padding:20px;margin:14px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}.input{width:100%;padding:12px;border-radius:10px;border:1px solid #3a2e3d;background:#0e0b10;color:white;margin:6px 0}.btn{padding:11px 15px;border:0;border-radius:10px;background:linear-gradient(135deg,#ff3f8e,#8b5cf6);color:white;font-weight:800;cursor:pointer}.btn.alt{background:#27202b}.muted{color:#aaa}.hidden{display:none}.user{display:flex;justify-content:space-between;gap:10px;align-items:center}.chat{max-height:360px;overflow:auto;background:#0e0b10;padding:12px;border-radius:12px}.msg{padding:8px 10px;margin:6px 0;border-radius:10px;background:#211a24}.mine{text-align:right;background:#5a1940}.small{font-size:12px}
+</style></head><body><div class="wrap">
+<div class="bar"><div class="brand">Secret<b>18</b></div><div><span id="account"></span> <button class="btn alt" onclick="openAdmin()">Administration</button></div></div>
+<section id="auth"><div class="card"><h1>Bienvenue sur Secret18</h1><p class="muted">Réseau social privé réservé aux adultes.</p><div class="grid"><div><h2>Créer un compte</h2><input id="ruser" class="input" placeholder="Nom d'utilisateur"><input id="remail" class="input" placeholder="E-mail"><input id="rpass" type="password" class="input" placeholder="Mot de passe (8+ caractères)"><label><input id="rage" type="checkbox"> Je confirme avoir 18 ans ou plus.</label><button class="btn" onclick="register()">S'inscrire</button></div><div><h2>Connexion</h2><input id="lemail" class="input" placeholder="E-mail"><input id="lpass" type="password" class="input" placeholder="Mot de passe"><button class="btn" onclick="login()">Se connecter</button></div></div><p id="err"></p></div></section>
+<section id="app" class="hidden">
+<div class="card"><h2>Publier</h2><input id="pfile" class="input" type="file" accept="image/jpeg,image/png,image/webp"><input id="purl" class="input" placeholder="URL de l'image (optionnel)"><input id="pcap" class="input" placeholder="Légende"><button class="btn" onclick="post()">Publier</button> <button class="btn alt" onclick="story()">Ajouter une story</button></div>
+<div class="card"><h2>Fil d'actualité</h2><div id="feed"></div></div>
+<div class="card"><h2>Découvrir</h2><input id="search" class="input" placeholder="Rechercher un membre…" oninput="loadUsers()"><div id="users"></div></div>
+<div class="card"><h2>Messages</h2><div id="chat"></div><input id="recipient" class="input" placeholder="ID du destinataire"><input id="body" class="input" placeholder="Écrire un message…"><button class="btn" onclick="sendMessage()">Envoyer</button></div>
+<div class="card"><h2>Compte</h2><button class="btn alt" onclick="logout()">Se déconnecter</button></div></section>
+</div>
+<div id="admin" class="card hidden" style="position:fixed;inset:5%;z-index:20;overflow:auto;background:#151019;border:2px solid #ff3f8e"><button class="btn alt" onclick="$('admin').classList.add('hidden')">Fermer</button><h2>🛡️ Secret18 — Administration</h2><div id="stats" class="grid"></div><h3>Utilisateurs</h3><div id="adminUsers"></div><h3>Signalements</h3><div id="reports"></div></div>
+<script>
+let me=null,current=null;
+async function uploadFile(){
+ const f=$("pfile").files[0]; if(!f)return null;
+ const fd=new FormData(); fd.append("image",f);
+ const r=await fetch("/api/upload",{method:"POST",body:fd}); const d=await r.json();
+ if(!r.ok)throw Error(d.error||"Upload impossible"); return d.url;
+}
+async function post(){try{const uploaded=await uploadFile();const media=uploaded||$("purl").value;if(!media)throw Error("Choisis une image ou indique une URL.");await api("/api/posts",{method:"POST",body:JSON.stringify({media_url:media,caption:$("pcap").value})});$("purl").value="";$("pcap").value="";loadFeed()}catch(e){alert(e.message)}}
+async function story(){try{const uploaded=await uploadFile();const media=uploaded||$("purl").value;if(!media)throw Error("Choisis une image ou indique une URL.");await api("/api/stories",{method:"POST",body:JSON.stringify({media_url:media})});alert("Story ajoutée pour 24h")}catch(e){alert(e.message)}}
+async function loadFeed(){const d=await api("/api/feed");$("feed").innerHTML=d.posts.map(p=>`<div class="card"><img src="${p.media_url}" style="width:100%;max-height:500px;object-fit:cover;border-radius:12px"><p><b>@${p.username}</b> ${escapeHtml(p.caption||"")}</p><button class="btn alt" onclick="likePost(${p.id})">♥ ${p.likes}</button></div>`).join("")||"<p class='muted'>Aucune publication.</p>"}
+async function likePost(id){await api("/api/posts/"+id+"/like",{method:"POST"});loadFeed()}
+
+const $=id=>document.getElementById(id), msg=t=>{$("err").textContent=t};
+async function api(url,opt={}){const r=await fetch(url,{headers:{"Content-Type":"application/json"},...opt});const d=await r.json();if(!r.ok)throw Error(d.error||"Erreur");return d}
+async function openAdmin(){try{const s=await api("/api/admin/stats");$("admin").classList.remove("hidden");$("stats").innerHTML=`<div class="card"><b>${s.users}</b><br>Utilisateurs</div><div class="card"><b>${s.posts}</b><br>Publications</div><div class="card"><b>${s.stories}</b><br>Stories actives</div><div class="card"><b>${s.reports}</b><br>Signalements</div>`;const u=await api("/api/admin/users");$("adminUsers").innerHTML=u.users.map(x=>`<div class="user card"><span><b>@${x.username}</b><br><span class="muted">${x.email}</span></span><button class="btn alt" onclick="deleteUser(${x.id})">Supprimer</button></div>`).join("");const r=await api("/api/admin/reports");$("reports").innerHTML=r.reports.map(x=>`<div class="card"><b>@${x.reported}</b> signalé par @${x.reporter}<br>${escapeHtml(x.reason)}</div>`).join("")||"<p class='muted'>Aucun signalement.</p>"}catch(e){alert(e.message)}}
+async function deleteUser(id){if(confirm("Supprimer ce compte et ses contenus ?")){await api("/api/admin/users/"+id,{method:"DELETE"});openAdmin()}}
+async function boot(){const d=await api("/api/me");if(d.user){me=d.user;$("auth").classList.add("hidden");$("app").classList.remove("hidden");$("account").innerHTML=`@${me.username}`;loadUsers();loadFeed()}else{$("account").textContent=""}}
+async function register(){try{const d=await api("/api/register",{method:"POST",body:JSON.stringify({username:$("ruser").value,email:$("remail").value,password:$("rpass").value,age18:$("rage").checked})});me=d.user;await boot()}catch(e){msg(e.message)}}
+async function login(){try{await api("/api/login",{method:"POST",body:JSON.stringify({email:$("lemail").value,password:$("lpass").value})});await boot()}catch(e){msg(e.message)}}
+async function logout(){await api("/api/logout",{method:"POST"});location.reload()}
+async function loadUsers(){if(!me)return;const q=$("search").value;const d=await api("/api/users?q="+encodeURIComponent(q));$("users").innerHTML=d.users.map(u=>`<div class="user card"><div><b>@${u.username}</b><div class="muted small">ID ${u.id}</div></div><div><button class="btn" onclick="follow(${u.id})">Suivre</button> <button class="btn alt" onclick="selectUser(${u.id},'${u.username.replaceAll("'","")}')">Message</button></div></div>`).join("")||"<p class='muted'>Aucun résultat.</p>"}
+async function follow(id){try{const d=await api("/api/follow/"+id,{method:"POST"});alert(d.following?"Abonnement ajouté":"Abonnement retiré")}catch(e){alert(e.message)}}
+async function selectUser(id,name){current=id;$("recipient").value=id;await loadMessages(id);$("body").focus()}
+async function loadMessages(id){const d=await api("/api/messages/"+id);$("chat").innerHTML=d.messages.map(m=>`<div class="msg ${m.sender_id===me.id?"mine":""}"><b>${m.sender_name}</b><br>${escapeHtml(m.body)}<div class="small muted">${m.created_at}</div></div>`).join("")||"<p class='muted'>Aucun message.</p>"}
+async function sendMessage(){const id=Number($("recipient").value),body=$("body").value.trim();if(!id||!body)return;try{await api("/api/messages",{method:"POST",body:JSON.stringify({receiverId:id,body})});$("body").value="";await loadMessages(id)}catch(e){alert(e.message)}}
+function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
+boot();
+</script></body></html>
